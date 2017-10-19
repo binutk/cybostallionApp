@@ -1,5 +1,5 @@
 long totalSize = 0;
-    public void makePOSTUploadRequest(final String url, final String data, final String fileName, final String arbitaryName, final Listener callback, final FileUploadListener fileUploadListener)
+    public void makePOSTUploadRequest(final String url, final String data, final String fileName, final String arbitaryName, final RemoteListener callback, final RemoteFileUploadListener fileUploadListener)
     {
         System.out.println("url: "+url);
         System.out.println("data: "+data);
@@ -115,7 +115,7 @@ long totalSize = 0;
                     HttpResponse hresponse = client.execute(httpPost);
                     InputStreamReader isr = new InputStreamReader(hresponse.getEntity().getContent());
                     Gson g = new Gson();
-                    CloudResponse response = g.fromJson(isr, CloudResponse.class);
+                    RemoteResponse response = g.fromJson(isr, RemoteResponse.class);
                     if(response==null)
                     {
                         callback.onError("Server response error");
@@ -141,6 +141,6 @@ long totalSize = 0;
         T.start();
     }
 
-    public interface FileUploadListener{
+    public interface RemoteFileUploadListener{
         public void onUploadProgress(int progress); // callback with percentage of completed upload
     }
