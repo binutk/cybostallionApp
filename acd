@@ -1,0 +1,146 @@
+long totalSize = 0;
+    public void makePOSTUploadRequest(final String url, final String data, final String fileName, final String arbitaryName, final Listener callback, final FileUploadListener fileUploadListener)
+    {
+        System.out.println("url: "+url);
+        System.out.println("data: "+data);
+
+        Thread T = new Thread(){
+            @Override
+            public void run(){
+                try {
+                    HttpPost httpPost = new HttpPost(url);
+                    System.out.println("fnm: "+fileName);
+                    File file = new File(fileName);
+                    if(file.exists()) System.out.println("FILE EXISTS");
+                    FileBody fileBody = new FileBody(file, ContentType.DEFAULT_BINARY,arbitaryName);
+                    MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create();
+                    multipartEntityBuilder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
+                    multipartEntityBuilder.addTextBody("request", data);
+                    multipartEntityBuilder.addPart("upfile",fileBody);
+                    final HttpEntity entity = multipartEntityBuilder.build();
+                    totalSize = fileBody.getContentLength()+data.length();
+
+                    class ProgressiveEntity implements HttpEntity{
+
+                        @Override
+                        public boolean isRepeatable() {
+                            return entity.isRepeatable();
+                        }
+
+                        @Override
+                        public boolean isChunked() {
+                            return entity.isChunked();
+                        }
+
+                        @Override
+                        public long getContentLength() {
+                            return entity.getContentLength();
+                        }
+
+                        @Override
+                        public Header getContentType() {
+                            return entity.getContentType();
+                        }
+
+                        @Override
+                        public Header getContentEncoding() {
+                            return entity.getContentEncoding();
+                        }
+
+                        @Override
+                        public InputStream getContent() throws IOException, IllegalStateException {
+                            return entity.getContent();
+                        }
+
+                        @Override
+                        public boolean isStreaming() {
+                            return entity.isStreaming();
+                        }
+
+                        @Override
+                        public void consumeContent() throws IOException {
+                            entity.consumeContent();
+                        }
+
+                        @Override
+                        public void writeTo(OutputStream outputStream) throws IOException {
+                                class ProxyOutputStream extends FilterOutputStream{
+
+                                    public ProxyOutputStream(OutputStream proxy) {
+                                        super(proxy);
+                                    }
+                                    public void write(int idx) throws IOException {
+                                        out.write(idx);
+                                    }
+                                    public void write(byte[] bts) throws IOException {
+                                        out.write(bts);
+                                    }
+                                    public void write(byte[] bts, int st, int end) throws IOException {
+                                        out.write(bts, st, end);
+                                    }
+                                    public void flush() throws IOException {
+                                        out.flush();
+                                    }
+                                    public void close() throws IOException {
+                                        out.close();
+                                    }
+                                }
+                            class ProgressiveOutputStream extends ProxyOutputStream{
+                                long totalSent = 0;
+                                public ProgressiveOutputStream(OutputStream proxy) {
+                                    super(proxy);
+                                    totalSent = 0;
+                                }
+                                public void write(byte[] bts, int st, int end) throws IOException {
+
+                                    // FIXME  Put your progress bar stuff here!
+                                    totalSent += end;
+                                    fileUploadListener.onUploadProgress((int) ((totalSent / (float) totalSize) * 100));
+                                    out.write(bts, st, end);
+                                }
+                            }
+                            entity.writeTo(new ProgressiveOutputStream(outputStream));
+
+                        }
+                    }
+
+                    ProgressiveEntity progressiveEntity = new ProgressiveEntity();
+
+                    httpPost.setEntity(progressiveEntity);
+                    System.out.println("httpost: "+httpPost.getRequestLine().toString());
+
+                    HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();
+
+                    HttpClient client = httpClientBuilder.build();
+                    HttpResponse hresponse = client.execute(httpPost);
+                    InputStreamReader isr = new InputStreamReader(hresponse.getEntity().getContent());
+                    Gson g = new Gson();
+                    CloudResponse response = g.fromJson(isr, CloudResponse.class);
+                    if(response==null)
+                    {
+                        callback.onError("Server response error");
+                    }else{
+                        if(response.status==0 && response.message.length()>0)
+                        {
+                            callback.onError(response.message);
+                        }else if(response.status==1){
+                            callback.onResponse(response);
+                        }
+                        if(response.release)
+                        {
+                            callback.onRelease();
+                        }
+                    }
+
+
+                } catch (Exception ex) {
+                    Logger.getLogger(VampireCloud.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        };
+        T.start();
+    }
+
+    public interface FileUploadListener{
+        public void onUploadProgress(int progress); // callback with percentage of completed upload
+    }
